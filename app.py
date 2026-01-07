@@ -1,16 +1,31 @@
 import streamlit as st
 import pandas as pd
 import joblib
+import os
 import matplotlib.pyplot as plt
 
 # ===============================
-# Load model & scaler
+# CEK FILE MODEL
 # ===============================
-model = joblib.load("model_rf.pkl")
-scaler = joblib.load("scaler.pkl")
+MODEL_PATH = "model_rf.pkl"
+SCALER_PATH = "scaler.pkl"
+
+if not os.path.exists(MODEL_PATH):
+    st.error("❌ File model_rf.pkl tidak ditemukan. Pastikan file ada di folder yang sama dengan app.py")
+    st.stop()
+
+if not os.path.exists(SCALER_PATH):
+    st.error("❌ File scaler.pkl tidak ditemukan. Pastikan file ada di folder yang sama dengan app.py")
+    st.stop()
 
 # ===============================
-# UI
+# LOAD MODEL & SCALER
+# ===============================
+model = joblib.load(MODEL_PATH)
+scaler = joblib.load(SCALER_PATH)
+
+# ===============================
+# SETUP DASHBOARD
 # ===============================
 st.set_page_config(
     page_title="Dashboard Prediksi Kesehatan Hewan",
@@ -19,14 +34,18 @@ st.set_page_config(
 
 st.title("🐁 Dashboard Prediksi Kesehatan Hewan Percobaan")
 st.markdown(
-    "Implementasi **Machine Learning Random Forest** untuk prediksi kesehatan hewan percobaan."
+    """
+    Dashboard ini mengimplementasikan **Machine Learning Random Forest**
+    untuk memprediksi kondisi kesehatan hewan percobaan berbasis data lingkungan
+    dan fisiologis.
+    """
 )
 
 # ===============================
-# Upload Data
+# UPLOAD DATA
 # ===============================
 uploaded_file = st.file_uploader(
-    "📤 Upload data (Excel)",
+    "📤 Upload Data Excel",
     type=["xlsx"]
 )
 
@@ -36,33 +55,41 @@ if uploaded_file is not None:
     st.subheader("📊 Data Input")
     st.dataframe(data.head())
 
-    # Preprocessing
+    # ===============================
+    # PREPROCESSING
+    # ===============================
     X = data.drop(columns=["Label Kesehatan"], errors="ignore")
     X_scaled = scaler.transform(X)
 
-    # Prediction
+    # ===============================
+    # PREDIKSI
+    # ===============================
     data["Prediksi Kesehatan"] = model.predict(X_scaled)
 
     st.subheader("🧠 Hasil Prediksi")
     st.dataframe(data)
 
-    # Visualization
-    st.subheader("📈 Distribusi Prediksi")
+    # ===============================
+    # VISUALISASI
+    # ===============================
+    st.subheader("📈 Distribusi Hasil Prediksi")
     counts = data["Prediksi Kesehatan"].value_counts()
 
     fig, ax = plt.subplots()
     ax.bar(counts.index, counts.values)
+    ax.set_xlabel("Kategori Kesehatan")
     ax.set_ylabel("Jumlah")
-    ax.set_xlabel("Kategori")
-    ax.set_title("Prediksi Kesehatan Hewan")
+    ax.set_title("Distribusi Prediksi Kesehatan Hewan")
     st.pyplot(fig)
 
-    # Download
+    # ===============================
+    # DOWNLOAD
+    # ===============================
     st.download_button(
-        "⬇️ Download hasil prediksi",
+        label="⬇️ Download Hasil Prediksi",
         data=data.to_csv(index=False),
         file_name="hasil_prediksi_kesehatan.csv",
         mime="text/csv"
     )
 else:
-    st.info("Silakan upload file Excel untuk memulai prediksi.")
+    st.info("📌 Silakan upload file Excel untuk memulai prediksi.")
