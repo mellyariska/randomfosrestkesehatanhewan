@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -83,24 +82,28 @@ with st.expander("📄 Classification Report"):
     st.text(classification_report(y_test, y_pred))
 
 # ===============================
-# CONFUSION MATRIX
+# CONFUSION MATRIX (MATPLOTLIB)
 # ===============================
 st.subheader("🧩 Confusion Matrix")
 
 cm = confusion_matrix(y_test, y_pred, labels=model.classes_)
+
 fig, ax = plt.subplots()
-sns.heatmap(
-    cm,
-    annot=True,
-    fmt="d",
-    cmap="Blues",
-    xticklabels=model.classes_,
-    yticklabels=model.classes_,
-    ax=ax
-)
+im = ax.imshow(cm)
+
+ax.set_xticks(range(len(model.classes_)))
+ax.set_yticks(range(len(model.classes_)))
+ax.set_xticklabels(model.classes_)
+ax.set_yticklabels(model.classes_)
+
 ax.set_xlabel("Prediksi")
 ax.set_ylabel("Aktual")
 ax.set_title("Confusion Matrix")
+
+for i in range(len(cm)):
+    for j in range(len(cm)):
+        ax.text(j, i, cm[i, j], ha="center", va="center")
+
 st.pyplot(fig)
 
 # ===============================
@@ -108,20 +111,19 @@ st.pyplot(fig)
 # ===============================
 st.subheader("📈 Feature Importance")
 
-importance = model.feature_importances_
 fi_df = pd.DataFrame({
     "Fitur": X.columns,
-    "Importance": importance
+    "Importance": model.feature_importances_
 }).sort_values(by="Importance", ascending=False)
 
 st.dataframe(fi_df)
 
-plt.figure()
-plt.barh(fi_df["Fitur"], fi_df["Importance"])
-plt.xlabel("Importance")
-plt.title("Feature Importance Random Forest")
-plt.gca().invert_yaxis()
-st.pyplot(plt)
+fig, ax = plt.subplots()
+ax.barh(fi_df["Fitur"], fi_df["Importance"])
+ax.set_xlabel("Importance")
+ax.set_title("Feature Importance Random Forest")
+ax.invert_yaxis()
+st.pyplot(fig)
 
 # ===============================
 # PREDIKSI DATA BARU (SATUAN)
@@ -149,8 +151,6 @@ proba = model.predict_proba(input_df)
 
 st.subheader("📌 Hasil Prediksi")
 st.success(f"Hasil Prediksi Kesehatan: **{pred}**")
-
-st.write("Probabilitas:")
 st.dataframe(pd.DataFrame(proba, columns=model.classes_))
 
 # ===============================
@@ -165,28 +165,22 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
     df_new = pd.read_csv(uploaded_file)
-    st.write("📄 Data yang diunggah:")
     st.dataframe(df_new.head())
 
-    # Encoding kategorikal
     for col in cat_cols:
         if col in df_new.columns:
             df_new[col] = encoder.fit_transform(df_new[col])
 
-    # Scaling numerik
     df_new[num_cols] = scaler.transform(df_new[num_cols])
-
-    # Prediksi
     df_new["Prediksi_Kesehatan"] = model.predict(df_new)
 
     st.success("✅ Prediksi massal berhasil")
     st.dataframe(df_new)
 
-    # Download
     csv = df_new.to_csv(index=False).encode("utf-8")
     st.download_button(
-        label="⬇️ Download Hasil Prediksi",
-        data=csv,
-        file_name="hasil_prediksi_kesehatan.csv",
-        mime="text/csv"
+        "⬇️ Download Hasil Prediksi",
+        csv,
+        "hasil_prediksi_kesehatan.csv",
+        "text/csv"
     )
