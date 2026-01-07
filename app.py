@@ -1,18 +1,20 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 # ===============================
-# JUDUL DASHBOARD
+# KONFIGURASI HALAMAN
 # ===============================
-st.set_page_config(page_title="Dashboard Kesehatan Hewan - Random Forest", layout="wide")
+st.set_page_config(page_title="Dashboard Kesehatan Hewan", layout="wide")
 st.title("🐭 Dashboard Prediksi Kesehatan Hewan (Random Forest)")
-st.write("Implementasi Machine Learning untuk Prediksi Kesehatan Hewan Percobaan")
+st.caption("Implementasi Machine Learning untuk Prediksi Kesehatan Hewan Percobaan")
 
 # ===============================
 # LOAD DATA
@@ -29,77 +31,162 @@ st.dataframe(data.head())
 # ===============================
 # FITUR & LABEL
 # ===============================
-X = data.drop(columns=["Label Kesehatan"])
 y = data["Label Kesehatan"]
+X = data.drop(columns=["Label Kesehatan"])
 
 # ===============================
-# SPLIT & SCALING
+# ENCODING KATEGORIKAL
+# ===============================
+cat_cols = X.select_dtypes(include=["object"]).columns
+num_cols = X.select_dtypes(exclude=["object"]).columns
+
+encoder = LabelEncoder()
+for col in cat_cols:
+    X[col] = encoder.fit_transform(X[col])
+
+# ===============================
+# SPLIT DATA
 # ===============================
 X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y
+    X, y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y
 )
 
+# ===============================
+# SCALING (NUMERIK SAJA)
+# ===============================
 scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+X_train[num_cols] = scaler.fit_transform(X_train[num_cols])
+X_test[num_cols] = scaler.transform(X_test[num_cols])
 
 # ===============================
-# TRAIN MODEL
+# TRAIN RANDOM FOREST
 # ===============================
 model = RandomForestClassifier(
     n_estimators=200,
     random_state=42
 )
-model.fit(X_train_scaled, y_train)
+model.fit(X_train, y_train)
 
 # ===============================
 # EVALUASI MODEL
 # ===============================
-y_pred = model.predict(X_test_scaled)
+y_pred = model.predict(X_test)
 acc = accuracy_score(y_test, y_pred)
 
 st.subheader("✅ Evaluasi Model")
-st.metric("Akurasi Model", f"{acc:.2%}")
+st.metric("Akurasi", f"{acc:.2%}")
 
-with st.expander("Lihat Classification Report"):
+with st.expander("📄 Classification Report"):
     st.text(classification_report(y_test, y_pred))
 
 # ===============================
-# PREDIKSI DATA BARU
+# CONFUSION MATRIX
 # ===============================
-st.subheader("🔮 Prediksi Kesehatan Hewan Baru")
+st.subheader("🧩 Confusion Matrix")
 
-st.write("Masukkan nilai parameter fisiologis hewan:")
+cm = confusion_matrix(y_test, y_pred, labels=model.classes_)
+fig, ax = plt.subplots()
+sns.heatmap(
+    cm,
+    annot=True,
+    fmt="d",
+    cmap="Blues",
+    xticklabels=model.classes_,
+    yticklabels=model.classes_,
+    ax=ax
+)
+ax.set_xlabel("Prediksi")
+ax.set_ylabel("Aktual")
+ax.set_title("Confusion Matrix")
+st.pyplot(fig)
+
+# ===============================
+# FEATURE IMPORTANCE
+# ===============================
+st.subheader("📈 Feature Importance")
+
+importance = model.feature_importances_
+fi_df = pd.DataFrame({
+    "Fitur": X.columns,
+    "Importance": importance
+}).sort_values(by="Importance", ascending=False)
+
+st.dataframe(fi_df)
+
+plt.figure()
+plt.barh(fi_df["Fitur"], fi_df["Importance"])
+plt.xlabel("Importance")
+plt.title("Feature Importance Random Forest")
+plt.gca().invert_yaxis()
+st.pyplot(plt)
+
+# ===============================
+# PREDIKSI DATA BARU (SATUAN)
+# ===============================
+st.subheader("🔮 Prediksi Data Baru")
 
 input_data = {}
-
 for col in X.columns:
-    input_data[col] = st.number_input(
-        f"{col}",
-        value=float(X[col].mean())
-    )
+    if col in num_cols:
+        input_data[col] = st.number_input(
+            f"{col}",
+            value=float(X[col].mean())
+        )
+    else:
+        input_data[col] = st.number_input(
+            f"{col}",
+            value=int(X[col].mode()[0])
+        )
 
 input_df = pd.DataFrame([input_data])
-input_scaled = scaler.transform(input_df)
+input_df[num_cols] = scaler.transform(input_df[num_cols])
 
-prediction = model.predict(input_scaled)[0]
-prediction_proba = model.predict_proba(input_scaled)
+pred = model.predict(input_df)[0]
+proba = model.predict_proba(input_df)
 
-# ===============================
-# HASIL PREDIKSI
-# ===============================
 st.subheader("📌 Hasil Prediksi")
+st.success(f"Hasil Prediksi Kesehatan: **{pred}**")
 
-if prediction == "Sehat":
-    st.success(f"✅ Status Kesehatan: **{prediction}**")
-elif prediction == "Risiko Rendah":
-    st.warning(f"⚠️ Status Kesehatan: **{prediction}**")
-else:
-    st.error(f"❌ Status Kesehatan: **{prediction}**")
+st.write("Probabilitas:")
+st.dataframe(pd.DataFrame(proba, columns=model.classes_))
 
-st.write("Probabilitas Prediksi:")
-proba_df = pd.DataFrame(
-    prediction_proba,
-    columns=model.classes_
+# ===============================
+# PREDIKSI MASSAL (UPLOAD CSV)
+# ===============================
+st.subheader("📂 Prediksi Massal (Upload CSV)")
+
+uploaded_file = st.file_uploader(
+    "Upload file CSV (struktur sama dengan data training)",
+    type=["csv"]
 )
-st.dataframe(proba_df)
+
+if uploaded_file:
+    df_new = pd.read_csv(uploaded_file)
+    st.write("📄 Data yang diunggah:")
+    st.dataframe(df_new.head())
+
+    # Encoding kategorikal
+    for col in cat_cols:
+        if col in df_new.columns:
+            df_new[col] = encoder.fit_transform(df_new[col])
+
+    # Scaling numerik
+    df_new[num_cols] = scaler.transform(df_new[num_cols])
+
+    # Prediksi
+    df_new["Prediksi_Kesehatan"] = model.predict(df_new)
+
+    st.success("✅ Prediksi massal berhasil")
+    st.dataframe(df_new)
+
+    # Download
+    csv = df_new.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️ Download Hasil Prediksi",
+        data=csv,
+        file_name="hasil_prediksi_kesehatan.csv",
+        mime="text/csv"
+    )
