@@ -154,7 +154,7 @@ st.success(f"Hasil Prediksi Kesehatan: **{pred}**")
 st.dataframe(pd.DataFrame(proba, columns=model.classes_))
 
 # ===============================
-# PREDIKSI MASSAL (UPLOAD CSV)
+# PREDIKSI MASSAL (UPLOAD CSV) - FIX
 # ===============================
 st.subheader("📂 Prediksi Massal (Upload CSV)")
 
@@ -165,22 +165,41 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
     df_new = pd.read_csv(uploaded_file)
+    st.write("📄 Data yang diunggah:")
     st.dataframe(df_new.head())
 
+    # 🔹 Ambil kolom training (X.columns)
+    expected_cols = X.columns.tolist()
+
+    # 🔹 Cek kolom hilang
+    missing_cols = set(expected_cols) - set(df_new.columns)
+    if missing_cols:
+        st.error(f"❌ Kolom berikut HILANG di CSV: {missing_cols}")
+        st.stop()
+
+    # 🔹 Buang kolom berlebih
+    df_new = df_new[expected_cols]
+
+    # 🔹 Encoding kategorikal
     for col in cat_cols:
         if col in df_new.columns:
-            df_new[col] = encoder.fit_transform(df_new[col])
+            df_new[col] = df_new[col].astype(str)
+            df_new[col] = LabelEncoder().fit_transform(df_new[col])
 
+    # 🔹 Scaling numerik
     df_new[num_cols] = scaler.transform(df_new[num_cols])
+
+    # 🔹 Prediksi
     df_new["Prediksi_Kesehatan"] = model.predict(df_new)
 
     st.success("✅ Prediksi massal berhasil")
     st.dataframe(df_new)
 
+    # 🔹 Download hasil
     csv = df_new.to_csv(index=False).encode("utf-8")
     st.download_button(
-        "⬇️ Download Hasil Prediksi",
-        csv,
-        "hasil_prediksi_kesehatan.csv",
-        "text/csv"
+        label="⬇️ Download Hasil Prediksi",
+        data=csv,
+        file_name="hasil_prediksi_kesehatan.csv",
+        mime="text/csv"
     )
