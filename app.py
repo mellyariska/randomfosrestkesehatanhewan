@@ -1,8 +1,3 @@
-import joblib
-
-joblib.dump(model, "model_rf.pkl")
-joblib.dump(scaler, "scaler.pkl")
-
 import streamlit as st
 import pandas as pd
 import joblib
@@ -83,3 +78,4 @@ if uploaded_file is not None:
 
 else:
     st.info("Silakan upload file data untuk memulai prediksi.")
+
