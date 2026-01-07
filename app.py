@@ -1,95 +1,66 @@
 import streamlit as st
 import pandas as pd
-import joblib
-import os
-import matplotlib.pyplot as plt
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
 
 # ===============================
-# CEK FILE MODEL
+# LOAD DATA
 # ===============================
-MODEL_PATH = "model_rf.pkl"
-SCALER_PATH = "scaler.pkl"
+@st.cache_data
+def load_data():
+    return pd.read_excel("data_mencit_tendik_alfinsuhanda.xlsx")
 
-if not os.path.exists(MODEL_PATH):
-    st.error("❌ File model_rf.pkl tidak ditemukan. Pastikan file ada di folder yang sama dengan app.py")
-    st.stop()
-
-if not os.path.exists(SCALER_PATH):
-    st.error("❌ File scaler.pkl tidak ditemukan. Pastikan file ada di folder yang sama dengan app.py")
-    st.stop()
+data = load_data()
 
 # ===============================
-# LOAD MODEL & SCALER
+# PREPARE DATA
 # ===============================
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
+X = data.drop(columns=["ID_Tikus", "Label Kesehatan"])
+y = data["Label Kesehatan"]
 
-# ===============================
-# SETUP DASHBOARD
-# ===============================
-st.set_page_config(
-    page_title="Dashboard Prediksi Kesehatan Hewan",
-    layout="wide"
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-st.title("🐁 Dashboard Prediksi Kesehatan Hewan Percobaan")
-st.markdown(
-    """
-    Dashboard ini mengimplementasikan **Machine Learning Random Forest**
-    untuk memprediksi kondisi kesehatan hewan percobaan berbasis data lingkungan
-    dan fisiologis.
-    """
-)
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
 # ===============================
-# UPLOAD DATA
+# TRAIN MODEL (DI CLOUD)
 # ===============================
-uploaded_file = st.file_uploader(
-    "📤 Upload Data Excel",
-    type=["xlsx"]
+model = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
 )
+model.fit(X_train_scaled, y_train)
 
-if uploaded_file is not None:
-    data = pd.read_excel(uploaded_file)
+# ===============================
+# EVALUATION
+# ===============================
+y_pred = model.predict(X_test_scaled)
+acc = accuracy_score(y_test, y_pred)
 
-    st.subheader("📊 Data Input")
-    st.dataframe(data.head())
+# ===============================
+# STREAMLIT UI
+# ===============================
+st.title("Dashboard Prediksi Kesehatan Hewan Percobaan")
+st.subheader("Model: Random Forest")
 
-    # ===============================
-    # PREPROCESSING
-    # ===============================
-    X = data.drop(columns=["Label Kesehatan"], errors="ignore")
-    X_scaled = scaler.transform(X)
+st.success(f"Akurasi Model: {acc:.2%}")
 
-    # ===============================
-    # PREDIKSI
-    # ===============================
-    data["Prediksi Kesehatan"] = model.predict(X_scaled)
+st.markdown("### Input Data Baru")
 
-    st.subheader("🧠 Hasil Prediksi")
-    st.dataframe(data)
+input_data = {}
+for col in X.columns:
+    input_data[col] = st.number_input(col, float(X[col].min()), float(X[col].max()))
 
-    # ===============================
-    # VISUALISASI
-    # ===============================
-    st.subheader("📈 Distribusi Hasil Prediksi")
-    counts = data["Prediksi Kesehatan"].value_counts()
+if st.button("Prediksi Kesehatan"):
+    input_df = pd.DataFrame([input_data])
+    input_scaled = scaler.transform(input_df)
+    prediction = model.predict(input_scaled)[0]
 
-    fig, ax = plt.subplots()
-    ax.bar(counts.index, counts.values)
-    ax.set_xlabel("Kategori Kesehatan")
-    ax.set_ylabel("Jumlah")
-    ax.set_title("Distribusi Prediksi Kesehatan Hewan")
-    st.pyplot(fig)
-
-    # ===============================
-    # DOWNLOAD
-    # ===============================
-    st.download_button(
-        label="⬇️ Download Hasil Prediksi",
-        data=data.to_csv(index=False),
-        file_name="hasil_prediksi_kesehatan.csv",
-        mime="text/csv"
-    )
-else:
-    st.info("📌 Silakan upload file Excel untuk memulai prediksi.")
+    st.subheader("Hasil Prediksi")
+    st.info(f"Status Kesehatan: **{prediction}**")
