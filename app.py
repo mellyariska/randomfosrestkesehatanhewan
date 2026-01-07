@@ -1,9 +1,18 @@
 import streamlit as st
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+import numpy as np
+
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, classification_report
+
+# ===============================
+# JUDUL DASHBOARD
+# ===============================
+st.set_page_config(page_title="Dashboard Kesehatan Hewan - Random Forest", layout="wide")
+st.title("🐭 Dashboard Prediksi Kesehatan Hewan (Random Forest)")
+st.write("Implementasi Machine Learning untuk Prediksi Kesehatan Hewan Percobaan")
 
 # ===============================
 # LOAD DATA
@@ -14,12 +23,18 @@ def load_data():
 
 data = load_data()
 
+st.subheader("📊 Data Asli")
+st.dataframe(data.head())
+
 # ===============================
-# PREPARE DATA
+# FITUR & LABEL
 # ===============================
-X = data.drop(columns=["ID_Tikus", "Label Kesehatan"])
+X = data.drop(columns=["Label Kesehatan"])
 y = data["Label Kesehatan"]
 
+# ===============================
+# SPLIT & SCALING
+# ===============================
 X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=42, stratify=y
 )
@@ -29,38 +44,62 @@ X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
 
 # ===============================
-# TRAIN MODEL (DI CLOUD)
+# TRAIN MODEL
 # ===============================
 model = RandomForestClassifier(
-    n_estimators=100,
+    n_estimators=200,
     random_state=42
 )
 model.fit(X_train_scaled, y_train)
 
 # ===============================
-# EVALUATION
+# EVALUASI MODEL
 # ===============================
 y_pred = model.predict(X_test_scaled)
 acc = accuracy_score(y_test, y_pred)
 
-# ===============================
-# STREAMLIT UI
-# ===============================
-st.title("Dashboard Prediksi Kesehatan Hewan Percobaan")
-st.subheader("Model: Random Forest")
+st.subheader("✅ Evaluasi Model")
+st.metric("Akurasi Model", f"{acc:.2%}")
 
-st.success(f"Akurasi Model: {acc:.2%}")
+with st.expander("Lihat Classification Report"):
+    st.text(classification_report(y_test, y_pred))
 
-st.markdown("### Input Data Baru")
+# ===============================
+# PREDIKSI DATA BARU
+# ===============================
+st.subheader("🔮 Prediksi Kesehatan Hewan Baru")
+
+st.write("Masukkan nilai parameter fisiologis hewan:")
 
 input_data = {}
+
 for col in X.columns:
-    input_data[col] = st.number_input(col, float(X[col].min()), float(X[col].max()))
+    input_data[col] = st.number_input(
+        f"{col}",
+        value=float(X[col].mean())
+    )
 
-if st.button("Prediksi Kesehatan"):
-    input_df = pd.DataFrame([input_data])
-    input_scaled = scaler.transform(input_df)
-    prediction = model.predict(input_scaled)[0]
+input_df = pd.DataFrame([input_data])
+input_scaled = scaler.transform(input_df)
 
-    st.subheader("Hasil Prediksi")
-    st.info(f"Status Kesehatan: **{prediction}**")
+prediction = model.predict(input_scaled)[0]
+prediction_proba = model.predict_proba(input_scaled)
+
+# ===============================
+# HASIL PREDIKSI
+# ===============================
+st.subheader("📌 Hasil Prediksi")
+
+if prediction == "Sehat":
+    st.success(f"✅ Status Kesehatan: **{prediction}**")
+elif prediction == "Risiko Rendah":
+    st.warning(f"⚠️ Status Kesehatan: **{prediction}**")
+else:
+    st.error(f"❌ Status Kesehatan: **{prediction}**")
+
+st.write("Probabilitas Prediksi:")
+proba_df = pd.DataFrame(
+    prediction_proba,
+    columns=model.classes_
+)
+st.dataframe(proba_df)
